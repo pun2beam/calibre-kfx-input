@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import io
 import os
 import sqlite3
@@ -18,7 +16,7 @@ from .yj_container import ROOT_FRAGMENT_TYPES
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 DEBUG = False
@@ -56,7 +54,7 @@ class KpfContainer(YJContainer):
 
                     elif ext == ".kdf-journal":
                         if len(zf.read(info)) > 0:
-                            raise Exception("kdf-journal is not empty in %s" % self.kpf_datafile.name)
+                            log.warning("kdf-journal is not empty in %s" % self.kpf_datafile.name)
 
                     elif ext == ".kcb":
                         self.kcb_datafile = DataFile(info.filename, zf.read(info), self.kpf_datafile)

@@ -7,7 +7,7 @@ from calibre.gui2.convert import Widget
 
 
 __license__ = "GPL v3"
-__copyright__ = "2017-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2017-2025, John Howell <jhowell@acm.org>"
 
 # the file name kfx_input and class name PluginWidget are required for calibre to access this properly
 # see config_widget_for_input_plugin() in gui2/convert/__init__.py
@@ -36,7 +36,7 @@ class PluginWidget(Widget):
 
         self.opt_allow_conversion_with_errors = QtWidgets.QCheckBox(Form)
         self.opt_allow_conversion_with_errors.setObjectName("opt_allow_conversion_with_errors")
-        self.opt_allow_conversion_with_errors.setText("Allow conversion to complete even if errors are detected")
+        self.opt_allow_conversion_with_errors.setText("Allow conversion to proceed even if errors are detected")
         self.formLayout.addRow(self.opt_allow_conversion_with_errors)
 
         self.formLayout.addItem(QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding))

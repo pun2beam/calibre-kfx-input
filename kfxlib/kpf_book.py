@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import copy
 import decimal
 import re
@@ -16,7 +14,7 @@ from .yj_versions import (GENERIC_CREATOR_VERSIONS, is_known_aux_metadata)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 FIX_BOOK = True

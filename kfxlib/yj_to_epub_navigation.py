@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 from lxml import etree
 import urllib.parse
 
@@ -11,7 +9,7 @@ from .yj_structure import APPROXIMATE_PAGE_LIST
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 KEEP_APPROX_PG_NUMS = False
@@ -37,7 +35,7 @@ PERIODICAL_NCX_CLASSES = {
 class KFX_EPUB_Navigation(object):
 
     def __init__(self):
-        pass
+        self.approximate_pages_removed = False
 
     def process_anchors(self):
         self.anchor_uri = {}
@@ -56,7 +54,11 @@ class KFX_EPUB_Navigation(object):
             self.check_fragment_name(anchor, "$266", anchor_name)
 
             if "$186" in anchor:
-                self.anchor_uri[str(anchor_name)] = anchor.pop("$186")
+                uri = anchor.pop("$186")
+                if uri in ["http://", "https://"]:
+                    uri = ""
+
+                self.anchor_uri[str(anchor_name)] = uri
             elif "$183" in anchor:
                 self.register_anchor(str(anchor_name), self.get_position(anchor.pop("$183")))
 
@@ -162,28 +164,33 @@ class KFX_EPUB_Navigation(object):
                     if nav_unit_name != "page_list_entry":
                         log.warning("Unexpected page_list nav_unit_name: %s" % nav_unit_name)
 
-                    if label and (KEEP_APPROX_PG_NUMS or DEBUG_PAGES or nav_container_name != APPROXIMATE_PAGE_LIST):
-                        anchor_name = "page_%s" % label
-                        if len(self.reading_orders) > 1:
-                            anchor_name = "%s_%s" % (reading_order_name, anchor_name)
-
-                        anchor_name = self.unique_anchor_name(anchor_name)
-                        anchor_id = self.register_anchor(anchor_name, target_position)
-
-                        if PREVENT_DUPLICATE_PAGE_TARGETS and anchor_id in self.page_anchor_id_label:
-                            log.warning("Page %s is at the same position as page %s" % (label, self.page_anchor_id_label[anchor_id]))
+                    if label:
+                        if nav_container_name == APPROXIMATE_PAGE_LIST and not (KEEP_APPROX_PG_NUMS or DEBUG_PAGES):
+                            if not self.approximate_pages_removed:
+                                log.warning("Removing approximate page numbers previously produced by KFX Output")
+                                self.approximate_pages_removed = True
                         else:
-                            self.page_anchor_id_label[anchor_id] = label
+                            anchor_name = "page_%s" % label
+                            if len(self.reading_orders) > 1:
+                                anchor_name = "%s_%s" % (reading_order_name, anchor_name)
 
-                            if self.page_label_anchor_id.get(label) == anchor_id:
-                                if REPORT_DUPLICATE_PAGES and label not in self.reported_duplicate_page_label:
-                                    log.warning("Page %s occurs multiple times with same position" % label)
-                                    self.reported_duplicate_page_label.add(label)
-                            elif PREVENT_DUPLICATE_PAGE_LABELS and len(self.reading_orders) == 1:
-                                log.warning("Page %s occurs multiple times with different positions" % label)
+                            anchor_name = self.unique_anchor_name(anchor_name)
+                            anchor_id = self.register_anchor(anchor_name, target_position)
+
+                            if PREVENT_DUPLICATE_PAGE_TARGETS and anchor_id in self.page_anchor_id_label:
+                                log.warning("Page %s is at the same position as page %s" % (label, self.page_anchor_id_label[anchor_id]))
                             else:
-                                self.page_label_anchor_id[label] = anchor_id
-                                self.add_pagemap_entry(label, anchor=anchor_name)
+                                self.page_anchor_id_label[anchor_id] = label
+
+                                if self.page_label_anchor_id.get(label) == anchor_id:
+                                    if REPORT_DUPLICATE_PAGES and label not in self.reported_duplicate_page_label:
+                                        log.warning("Page %s occurs multiple times with same position" % label)
+                                        self.reported_duplicate_page_label.add(label)
+                                elif PREVENT_DUPLICATE_PAGE_LABELS and len(self.reading_orders) == 1:
+                                    log.warning("Page %s occurs multiple times with different positions" % label)
+                                else:
+                                    self.page_label_anchor_id[label] = anchor_id
+                                    self.add_pagemap_entry(label, anchor=anchor_name)
 
                 self.check_empty(nav_unit, "nav_container %s nav_unit" % nav_container_name)
 
@@ -487,8 +494,9 @@ class KFX_EPUB_Navigation(object):
             body = book_part.body()
             for e in body.iter("*"):
                 if e.tag == "a" and e.get("href", "").startswith("anchor:"):
-                    e.set("href", self.clean_text_for_lxml(urlrelpath(
-                        self.get_anchor_uri(self.anchor_from_uri(e.attrib.pop("href"))), ref_from=book_part.filename)))
+                    uri = self.get_anchor_uri(self.anchor_from_uri(e.attrib.pop("href")))
+                    if uri:
+                        e.set("href", self.clean_text_for_lxml(urlrelpath(uri, ref_from=book_part.filename)))
 
         for g in self.guide:
             g.target = self.get_anchor_uri(g.anchor)

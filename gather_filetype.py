@@ -5,8 +5,9 @@ import zipfile
 
 from calibre.customize import FileTypePlugin
 
+
 __license__ = "GPL v3"
-__copyright__ = "2017-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2017-2025, John Howell <jhowell@acm.org>"
 
 
 class GatherKFXZIPFileTypePlugin(FileTypePlugin):
@@ -25,18 +26,13 @@ class GatherKFXZIPFileTypePlugin(FileTypePlugin):
 
         log = Log()
 
-        log.info("%s %s: Importing %s" % (self.name, ".".join([str(i) for i in self.version]), path_to_ebook))
+        # original_path_to_file added in calibre 2.74.0 (Dec 8, 2016)
+        log.info("%s %s: Importing %s" % (
+            self.name, ".".join([str(i) for i in self.version]), self.original_path_to_file))
 
         # see if this is a KFX container
         with open(path_to_ebook, "rb") as of:
             data = of.read(16)
-
-        has_kfx_drm = data.startswith(b"\xeaDRMION\xee")
-        if not (has_kfx_drm or data.startswith(b"CONT\x02\x00") or data.startswith(b"SQLite format 3\0")):
-            log.info("%s: File is not KFX format" % self.name)
-            return path_to_ebook
-
-        files = [path_to_ebook]
 
         # original_path_to_file added in calibre 2.74.0 (Dec 8, 2016)
         orig_path, orig_fn = os.path.split(self.original_path_to_file)
@@ -51,6 +47,13 @@ class GatherKFXZIPFileTypePlugin(FileTypePlugin):
         #log.info("orig_ext: %s" % orig_ext)
         #log.info("orig_dir: %s" % orig_dir)
         #log.info("sdr_path: %s" % sdr_path)
+
+        has_kfx_drm = data.startswith(b"\xeaDRMION\xee")
+        if not (has_kfx_drm or data.startswith(b"CONT\x02\x00") or data.startswith(b"SQLite format 3\0") or orig_ext == ".kfx"):
+            log.info("%s: Book is not KFX format" % self.name)
+            return path_to_ebook
+
+        files = [path_to_ebook]
 
         if orig_ext == ".kfx" and os.path.isdir(sdr_path):
             # e-ink Kindle

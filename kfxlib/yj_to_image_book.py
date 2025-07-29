@@ -1,6 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
-
 import collections
 import datetime
 import io
@@ -15,7 +12,7 @@ from .utilities import (json_serialize_compact, list_counts)
 from .yj_to_epub import KFX_EPUB
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 USE_HIGHEST_RESOLUTION_IMAGE_VARIANT = True
 DEBUG_VARIANTS = False
@@ -25,10 +22,10 @@ class KFX_IMAGE_BOOK(object):
     def __init__(self, book):
         self.book = book
 
-    def convert_book_to_cbz(self, split_landscape_comic_images):
+    def convert_book_to_cbz(self, split_landscape_comic_images, progress):
         kfx_epub = KFX_EPUB(self.book, metadata_only=True)
         is_rtl = kfx_epub.page_progression_direction == "rtl"
-        ordered_images = self.get_ordered_images(split_landscape_comic_images, kfx_epub.is_comic, is_rtl)[0]
+        ordered_images = self.get_ordered_images(split_landscape_comic_images, kfx_epub.is_comic, is_rtl, progress)[0]
 
         yj_metadata = self.book.get_yj_metadata_from_book()
         comic_book_info = {}
@@ -55,14 +52,13 @@ class KFX_IMAGE_BOOK(object):
                 comic_book_info["publicationYear"] = pubdate.year
 
         cbz_metadata = {"ComicBookInfo/1.0": comic_book_info} if comic_book_info else None
-
         return combine_images_into_cbz(ordered_images, cbz_metadata)
 
-    def convert_book_to_pdf(self, split_landscape_comic_images):
+    def convert_book_to_pdf(self, split_landscape_comic_images, progress):
         kfx_epub = KFX_EPUB(self.book, metadata_only=True)
         is_rtl = kfx_epub.page_progression_direction == "rtl"
         ordered_images, ordered_image_pids, content_pos_info = self.get_ordered_images(
-            split_landscape_comic_images, kfx_epub.is_comic, is_rtl)
+            split_landscape_comic_images, kfx_epub.is_comic, is_rtl, progress)
 
         yj_metadata = self.book.get_yj_metadata_from_book()
         current_date = datetime.datetime.now().strftime("D\072%Y%m%d%H%M%S")
@@ -102,14 +98,17 @@ class KFX_IMAGE_BOOK(object):
         add_pages_nums_to_toc(kfx_epub.ncx_toc)
         return combine_images_into_pdf(ordered_images, pdf_metadata, is_rtl, kfx_epub.ncx_toc)
 
-    def get_ordered_images(self, split_landscape_comic_images=False, is_comic=False, is_rtl=False):
+    def get_ordered_images(self, split_landscape_comic_images=False, is_comic=False, is_rtl=False, progress=None):
 
         ordered_image_resources, ordered_image_resource_pids, content_pos_info = self.book.get_ordered_image_resources()
+
+        if progress is not None:
+            progress.set_limit(len(ordered_image_resources) + 1)
 
         ordered_images = []
         ordered_image_pids = []
         split_image_count = 0
-        for fid, pid in zip(ordered_image_resources, ordered_image_resource_pids):
+        for cnt, (fid, pid) in enumerate(zip(ordered_image_resources, ordered_image_resource_pids)):
             image_resource = self.get_resource_image(fid)
             if image_resource is not None:
                 if (
@@ -141,6 +140,9 @@ class KFX_IMAGE_BOOK(object):
 
                 ordered_images.append(image_resource)
                 ordered_image_pids.append(pid)
+
+            if progress is not None:
+                progress.update_count(cnt)
 
         if split_image_count:
             log.warning("Split %d landscape comic images into left/right image pairs" % split_image_count)

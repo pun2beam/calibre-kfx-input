@@ -1,11 +1,9 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 from lxml import etree
 import operator
 import re
 import urllib.parse
 
-from .epub_output import (qname, SVG, SVG_NAMESPACES, SVG_NS_URI, XLINK_HREF, value_str)
+from .epub_output import (qname, split_value, SVG, SVG_NAMESPACES, SVG_NS_URI, XLINK_HREF, value_str)
 from .ion import (ion_type, IonSExp, IonStruct, IonSymbol)
 from .ion_symbol_table import LocalSymbolTable
 from .ion_text import IonText
@@ -15,7 +13,7 @@ from .yj_versions import KNOWN_SUPPORTED_FEATURES
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 DEVICE_SCREEN_NARROW_PX = 1200
@@ -136,6 +134,7 @@ class KFX_EPUB_Misc(object):
                 div_style.pop("font-size", "")
                 div_style.pop("line-height", "")
                 div_style.pop("-kfx-heading-level", "")
+                div_style.pop("margin-top", "")
 
                 img = image_div[0]
                 img_style = self.get_style(img)
@@ -192,7 +191,7 @@ class KFX_EPUB_Misc(object):
                 log.error("Incorrect image content for SVG wrapper: %s" % etree.tostring(image_div))
 
     def horizontal_fxl_block_images(self, content_elem, book_part):
-        left = 0
+        left_px = 0
         for image_div in content_elem.findall("*"):
 
             if image_div.tag == "div" and len(image_div) == 1 and image_div[0].tag == "img":
@@ -200,18 +199,28 @@ class KFX_EPUB_Misc(object):
                 img_file = self.oebps_files[get_url_filename(urlabspath(img.get("src"), ref_from=book_part.filename))]
                 img_style = self.get_style(img)
 
-                if "position" in img_style or "top" in img_style or "left" in img_style or "height" in img_style or "width" in img_style:
-                    log.error("Unexpected image style for horizontal fxl: %s" % etree.tostring(image_div))
+                if (img_style.get("position", "absolute") != "absolute" or
+                        split_value(img_style.get("left", "0"))[1] not in ["", "px"] or
+                        split_value(img_style.get("width", "0"))[1] not in ["", "px"]):
+                    log.error("Unexpected image style for horizontal fxl (h=%0d w=%d): %s" % (
+                        img_file.height, img_file.width, etree.tostring(image_div)))
+                else:
+                    img_style["position"] = "absolute"
 
-                img_style["position"] = "absolute"
-                img_style["top"] = value_str(0, "px")
-                img_style["left"] = value_str(left, "px")
-                img_style["height"] = value_str(img_file.height, "px")
-                img_style["width"] = value_str(img_file.width, "px")
-                self.set_style(img, img_style)
+                    if "top" not in img_style:
+                        img_style["top"] = value_str(0, "px")
 
-                left += img_file.width
+                    if "left" not in img_style:
+                        img_style["left"] = value_str(left_px, "px")
 
+                    if "height" not in img_style:
+                        img_style["height"] = value_str(img_file.height, "px")
+
+                    if "width" not in img_style:
+                        img_style["width"] = value_str(img_file.width, "px")
+
+                    self.set_style(img, img_style)
+                    left_px = round(float(split_value(img_style["left"])[0]) + float(split_value(img_style["width"])[0]))
             else:
                 log.error("Incorrect image content for horizontal fxl: %s" % etree.tostring(image_div))
 

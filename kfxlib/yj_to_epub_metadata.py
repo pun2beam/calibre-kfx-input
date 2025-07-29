@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import datetime
 
 from .message_logging import log
@@ -10,7 +8,7 @@ from .yj_structure import (METADATA_NAMES, SYM_TYPE)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 ORIENTATIONS = {
@@ -110,6 +108,8 @@ class KFX_EPUB_Metadata(object):
         self.page_progression_direction = doc_style.pop("direction", "ltr")
 
         self.default_font_family = doc_style.pop("font-family", DEFAULT_DOCUMENT_FONT_FAMILY)
+        if "," in self.default_font_family:
+            log.warning("Default font family contains multiple names: %s" % self.default_font_family)
 
         for default_name in DEFAULT_FONT_NAMES:
             for font_family in self.default_font_family.split(","):
@@ -266,7 +266,10 @@ class KFX_EPUB_Metadata(object):
             self.region_magnification = True
         elif cat_key == "kindle_capability_metadata/yj_publisher_panels":
             self.set_book_type("comic")
-            self.region_magnification = True
+            if value == 0:
+                self.virtual_panels_allowed = True
+            else:
+                self.region_magnification = True
         elif cat_key == "kindle_capability_metadata/yj_facing_page":
             self.set_book_type("comic")
         elif cat_key == "kindle_capability_metadata/yj_double_page_spread":

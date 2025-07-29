@@ -1,7 +1,6 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import collections
 import datetime
+import decimal
 import io
 from lxml import etree
 from PIL import (Image, ImageDraw, ImageFont)
@@ -12,8 +11,10 @@ import zipfile
 
 try:
     from calibre.utils.resources import get_path
+    from calibre.utils.config_base import tweaks
 except ImportError:
     get_path = None
+    tweaks = {}
 
 from .message_logging import log
 from .resources import (EPUB2_ALT_MIMETYPES, MIMETYPE_OF_EXT)
@@ -21,7 +22,7 @@ from .utilities import (make_unique_name, urlrelpath)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 GENERATE_EPUB2_NCX_DOCTYPE = False
@@ -1003,6 +1004,7 @@ class EPUB_Output(object):
 
         man = etree.SubElement(package, "manifest")
         toc_idref = None
+        has_page_spread = False
 
         for manifest_entry in sorted(self.manifest, key=lambda m: m.filename):
             if manifest_entry.filename == self.ncx_location or manifest_entry.filename.endswith(".ncx"):
@@ -1030,6 +1032,9 @@ class EPUB_Output(object):
                 else:
                     manifest_entry.opf_properties.add("rendition:layout-reflowable")
 
+                if manifest_entry.opf_properties & {"page-spread-left", "page-spread-right"}:
+                    has_page_spread = True
+
             item_properties = manifest_entry.opf_properties & MANIFEST_ITEM_PROPERTIES
             if len(item_properties) and not self.generate_epub2:
                 item.set("properties", " ".join(sorted(list(item_properties))))
@@ -1052,6 +1057,11 @@ class EPUB_Output(object):
                 itemref = etree.SubElement(spine, "itemref", attrib={"idref": manifest_entry.id})
 
                 itemref_properties = manifest_entry.opf_properties & SPINE_ITEMREF_PROPERTIES
+
+                if (tweaks.get("kfx_input_add_comic_spread_center", False) and self.is_comic
+                        and has_page_spread and not itemref_properties):
+                    itemref_properties.add("rendition:page-spread-center")
+
                 if len(itemref_properties) and not self.generate_epub2:
                     itemref.set("properties", " ".join([prefix(p) for p in sorted(list(itemref_properties))]))
 
@@ -1381,6 +1391,17 @@ def value_str(quantity, unit="", emit_zero_unit=False):
         return q_str
 
     return q_str + unit
+
+
+def split_value(val):
+    num_match = re.match(r"^([+-]?[0-9]+\.?[0-9]*)", val)
+    if not num_match:
+        return (None, val)
+
+    num = num_match.group(1)
+    unit = val[len(num):]
+
+    return (decimal.Decimal(num), unit)
 
 
 def roman_to_int(input):

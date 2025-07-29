@@ -1,6 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
-
 import io
 import os
 from PIL import Image
@@ -21,7 +18,7 @@ else:
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 COMBINE_TILES_LOSSLESS = True
 MIN_JPEG_QUALITY = 90

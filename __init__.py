@@ -17,16 +17,15 @@ from calibre.ebooks.conversion.plugins.epub_input import EPUBInput
 from calibre.ebooks.metadata.opf2 import OPF
 from calibre.utils.logging import Log
 
-
 __license__ = "GPL v3"
-__copyright__ = "2017-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2017-2025, John Howell <jhowell@acm.org>"
 
 
 class KFXInput(InputFormatPlugin):
     name = "KFX Input"
     author = "jhowell"
     file_types = {"azw8", "kfx", "kfx-zip", "kpf"}
-    version = (2, 17, 0)
+    version = (2, 25, 0)
     minimum_calibre_version = (5, 0, 0)     # Python 3.8.5
     supported_platforms = ["windows", "osx", "linux"]
     description = "Convert from Amazon KFX format"
@@ -42,8 +41,6 @@ class KFXInput(InputFormatPlugin):
     recommendations = EPUBInput.recommendations
 
     def __init__(self, *args, **kwargs):
-        from calibre_plugins.kfx_input.config import config_allow_import_from_kindles
-
         self.cli = False
         InputFormatPlugin.__init__(self, *args, **kwargs)
 
@@ -53,16 +50,14 @@ class KFXInput(InputFormatPlugin):
 
         self.load_kfx_icon()
         self.init_embedded_plugins()
-
-        if config_allow_import_from_kindles():
-            self.set_kfx_not_virtual()
+        self.set_kfx_not_virtual()
 
         for file_type in self.file_types:
             if file_type not in BOOK_EXTENSIONS:
                 BOOK_EXTENSIONS.append(file_type)   # show files of this type in add book format dialog
 
     def load_kfx_icon(self):
-        # calibre does not include an icon for KFX format
+        # calibre 7.26 and older does not include an icon for KFX format
 
         filename = os.path.join(config_dir, "resources", "images", "mimetypes", "kfx.png")
         if not os.path.isfile(filename):
@@ -83,7 +78,7 @@ class KFXInput(InputFormatPlugin):
         return PluginWidget(parent, get_option_by_name, get_option_help, db, book_id)
 
     def convert(self, stream, options, file_ext, log, accelerators):
-        from calibre_plugins.kfx_input.kfxlib import (clean_message, KFXDRMError, file_write_binary, set_logger, YJ_Book)
+        from calibre_plugins.kfx_input.kfxlib import (clean_message, KFXDRMError, file_write_binary, JobLog, set_logger, YJ_Book)
 
         self.report_version(log)
 
@@ -107,7 +102,7 @@ class KFXInput(InputFormatPlugin):
                     "plugin or the KFX Input plugin CLI. See the KFX Input plugin documentation for more information.")
 
             if book.is_fixed_layout or book.is_magazine:
-                job_log.error(
+                job_log.warning(
                     "This book has a layout that is incompatible with calibre conversion. For best results use either "
                     "the From KFX user interface plugin or the KFX Input plugin CLI for conversion. See the KFX Input "
                     "plugin documentation for more information.")
@@ -124,7 +119,7 @@ class KFXInput(InputFormatPlugin):
         except Exception as e:
             raise ConversionUserFeedBack(
                     "KFX conversion failed",
-                    "<b>Cannot convert %s</b><br><br>%s" % (clean_message(self.get_title(options)), clean_message(repr(e))),
+                    "<b>Cannot convert %s</b><br/><br/>%s" % (clean_message(self.get_title(options)), clean_message(repr(e))),
                     level="error")
 
         log.info("Successfully converted %s to EPUB -- running EPUB input plugin" % file_ext)
@@ -151,7 +146,7 @@ class KFXInput(InputFormatPlugin):
 
     def cli_main(self, argv):
         from calibre_plugins.kfx_input.config import config_split_landscape_comic_images
-        from calibre_plugins.kfx_input.kfxlib import (file_write_binary, set_logger, YJ_Book)
+        from calibre_plugins.kfx_input.kfxlib import (file_write_binary, JobLog, set_logger, YJ_Book)
 
         self.cli = True
         log = JobLog(Log())
@@ -208,7 +203,7 @@ class KFXInput(InputFormatPlugin):
 
         if args.cbz:
             if book.is_image_based_fixed_layout:
-                cbz_data = book.convert_to_cbz(split_landscape_comic_images=config_split_landscape_comic_images())
+                cbz_data = book.convert_to_cbz()
                 output_filename = self.get_output_filename(args, ".cbz")
                 file_write_binary(output_filename, cbz_data)
                 log.info("Converted book images to CBZ file %s" % output_filename)
@@ -318,38 +313,3 @@ def name_of_file(file):
         return file.name
 
     return "unknown"
-
-
-class JobLog(object):
-    '''
-    Logger that also collects errors and warnings for presentation in a job summary.
-    '''
-
-    def __init__(self, logger):
-        self.logger = logger
-        self.errors = []
-        self.warnings = []
-
-    def debug(self, msg):
-        self.logger.debug(msg)
-
-    def info(self, msg):
-        self.logger.info(msg)
-
-    def warn(self, msg):
-        self.warnings.append(msg)
-        self.logger.warn("WARNING: %s" % msg)
-
-    def warning(self, desc):
-        self.warn(desc)
-
-    def error(self, msg):
-        self.errors.append(msg)
-        self.logger.error("ERROR: %s" % msg)
-
-    def exception(self, msg):
-        self.errors.append("EXCEPTION: %s" % msg)
-        self.logger.exception("EXCEPTION: %s" % msg)
-
-    def __call__(self, *args):
-        self.info(" ".join([str(arg) for arg in args]))

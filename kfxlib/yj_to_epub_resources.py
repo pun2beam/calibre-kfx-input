@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import posixpath
 import re
 import urllib.parse
@@ -12,7 +10,7 @@ from .utilities import (root_filename, urlrelpath)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 USE_HIGHEST_RESOLUTION_IMAGE_VARIANT = True
@@ -41,8 +39,9 @@ class KFX_EPUB_Resources(object):
 
         resource = self.get_fragment(ftype="$164", fid=resource_name)
 
-        if resource.pop("$175", "") != resource_name:
-            raise Exception("Name of resource %s is incorrect" % resource_name)
+        int_resource_name = resource.pop("$175", "")
+        if int_resource_name != resource_name:
+            log.error("Name of resource %s is incorrect: %s" % (resource_name, int_resource_name))
 
         resource_format = resource.pop("$161", None)
 

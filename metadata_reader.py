@@ -3,7 +3,7 @@ from __future__ import (unicode_literals, division, absolute_import, print_funct
 from calibre.customize import MetadataReaderPlugin
 
 __license__ = "GPL v3"
-__copyright__ = "2017-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2017-2025, John Howell <jhowell@acm.org>"
 
 
 class KFXMetadataReader(MetadataReaderPlugin):

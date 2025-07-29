@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import copy
 from lxml import etree
 import math
@@ -16,7 +14,7 @@ from .yj_to_epub_properties import (REVERSE_HERITABLE_PROPERTIES)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 FIX_WIDE_UNICODE_OFFSETS = False
 CONSOLIDATE_HTML = True
@@ -360,7 +358,7 @@ class KFX_EPUB_Content(object):
                 text_elem.text = text
             except Exception:
                 if not self.is_print_replica:
-                    log.error("%s has invalid text content: %s" % (self.content_context, escape_string(text)))
+                    log.warning("%s has invalid text content: %s" % (self.content_context, escape_string(text)))
 
                 text_elem.text = self.clean_text_for_lxml(text)
 
@@ -702,6 +700,14 @@ class KFX_EPUB_Content(object):
             if "$104" in content:
                 content_elem.set("start", str(content.pop("$104")))
 
+            if "$102" in content:
+                list_indent_style = self.convert_yj_properties({"$53": content.pop("$102")})
+                if list_indent_style != self.Style({"padding-left": "0"}):
+                    try:
+                        self.add_style(content_elem, list_indent_style, replace=Exception)
+                    except Exception:
+                        log.error("Could not add list_indent since listalready has padding-left")
+
             self.add_content(content, content_elem, book_part, writing_mode)
 
         elif content_type == "$277":
@@ -721,7 +727,6 @@ class KFX_EPUB_Content(object):
                     except Exception:
                         try:
                             self.add_style(content_elem, list_indent_style, replace=Exception)
-                            log.info("added list_indent to content_elem")
                         except Exception:
                             log.error("Could not add list_indent since parent and listitem both already have padding-left")
 

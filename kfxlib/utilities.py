@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import atexit
 import base64
 import collections
@@ -34,7 +32,7 @@ except ImportError:
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 MAX_TEMPDIR_REMOVAL_TRIES = 60
@@ -155,7 +153,7 @@ def list_truncated(a_iter, max_allowed=10):
 
 
 def unicode_list(lst):
-    return [str(s) for s in lst]
+    return [str(s) if s else "''" for s in lst]
 
 
 def truncate_list(lst, max_allowed=10):
@@ -553,10 +551,14 @@ class DataFile(object):
         if isinstance(name_or_stream, str):
             self.stream = None
             self.relname = name_or_stream
-            self.is_real_file = data is None
+            self.is_real_file = data is None and parent is None
+        elif hasattr(name_or_stream, "name"):
+            self.stream = name_or_stream
+            self.relname = name_or_stream.name
+            self.is_real_file = os.path.isfile(name_or_stream.name)
         else:
             self.stream = name_or_stream
-            self.relname = self.stream.name if hasattr(self.stream, "name") else "stream"
+            self.relname = "unknown"
             self.is_real_file = False
 
         self.data = data
@@ -790,3 +792,31 @@ class Deserializer(object):
 
     def __len__(self):
         return len(self.buffer) - self.offset
+
+
+class CONVERSION_PROGRESS(object):
+    def __init__(self, progress_fn):
+        self.progress_fn = progress_fn
+        self.pct_complete = 0
+        self.limit = None
+        self.count = 0
+
+    def set_limit(self, limit):
+        self.limit = limit
+
+    def increment_count(self):
+        self.update_count(self.count + 1)
+
+    def update_count(self, count):
+        self.count = count
+        if self.limit:
+            self.pct_complete = max(min((self.count * 100) // self.limit, 100), 0)
+            self.report()
+
+    def report(self):
+        if self.progress_fn is not None:
+            self.progress_fn(self.pct_complete)
+
+
+def make_progress(progress_fn):
+    return CONVERSION_PROGRESS(progress_fn) if progress_fn is not None else None

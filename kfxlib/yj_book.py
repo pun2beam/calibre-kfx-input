@@ -1,10 +1,10 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
+import io
 import os
 import posixpath
 import traceback
 
 from .ion_symbol_table import (LocalSymbolTable, SymbolTableCatalog)
+from .ion_binary import IonBinary
 from .ion_text import IonText
 from .kfx_container import (KfxContainer, MAX_KFX_CONTAINER_SIZE)
 from .kpf_book import KpfBook
@@ -12,8 +12,8 @@ from .kpf_container import KpfContainer
 from .message_logging import log
 from .unpack_container import (IonTextContainer, JsonContentContainer, ZipUnpackContainer)
 from .utilities import (
-        DataFile, file_read_utf8, flush_unicode_cache, bytes_to_separated_hex, KFXDRMError,
-        temp_file_cleanup, ZIP_SIGNATURE)
+        DataFile, file_read_utf8, flush_unicode_cache, bytes_to_separated_hex,
+        KFXDRMError, make_progress, temp_file_cleanup, ZIP_SIGNATURE)
 from .yj_container import YJFragmentList
 from .yj_metadata import BookMetadata
 from .yj_position_location import BookPosLoc
@@ -22,7 +22,7 @@ from .yj_symbol_catalog import (IonSharedSymbolTable, YJ_SYMBOLS)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
@@ -99,24 +99,25 @@ class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
         self.final_actions()
         return result
 
-    def convert_to_epub(self, epub2_desired=False, force_cover=False):
+    def convert_to_epub(self, epub2_desired=False, force_cover=False, progress_fn=None):
         from .yj_to_epub import KFX_EPUB
         self.decode_book()
-        result = KFX_EPUB(self, epub2_desired=epub2_desired, force_cover=force_cover).decompile_to_epub()
+        result = KFX_EPUB(self, epub2_desired=epub2_desired, force_cover=force_cover,
+                          progress=make_progress(progress_fn)).decompile_to_epub()
         self.final_actions()
         return result
 
-    def convert_to_cbz(self, split_landscape_comic_images=False):
+    def convert_to_cbz(self, split_landscape_comic_images=False, progress_fn=None):
         from .yj_to_image_book import KFX_IMAGE_BOOK
         self.decode_book()
-        result = KFX_IMAGE_BOOK(self).convert_book_to_cbz(split_landscape_comic_images)
+        result = KFX_IMAGE_BOOK(self).convert_book_to_cbz(split_landscape_comic_images, make_progress(progress_fn))
         self.final_actions()
         return result
 
-    def convert_to_pdf(self, split_landscape_comic_images=False):
+    def convert_to_pdf(self, split_landscape_comic_images=False, progress_fn=None):
         from .yj_to_image_book import KFX_IMAGE_BOOK
         self.decode_book()
-        result = KFX_IMAGE_BOOK(self).convert_book_to_pdf(split_landscape_comic_images)
+        result = KFX_IMAGE_BOOK(self).convert_book_to_pdf(split_landscape_comic_images, make_progress(progress_fn))
         self.final_actions()
         return result
 
@@ -270,7 +271,7 @@ class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
                         self.check_located_file(info.filename, zf.read(info), self.datafile)
 
         else:
-            raise Exception("Unknown main file type. Must be azw8, ion, kfx, kfx-zip, kpf, or zip.")
+            raise Exception("Unknown main file type %s. Must be azw8, ion, kfx, kfx-zip, kpf, or zip." % self.datafile.ext)
 
         if not self.container_datafiles:
             raise Exception("No KFX containers found. This book is not in KFX format.")
@@ -291,12 +292,16 @@ class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
             pass
         elif ext in [".azw", ".azw8", ".azw9", ".kfx", ".md", ".res", ".yj"] or basename == "nbk":
             self.container_datafiles.append(DataFile(name, data, parent))
+        elif basename == "nbk-journal":
+            datafile = DataFile(name, data, parent)
+            if len(datafile.get_data()) > 0:
+                log.warning("nbk-journal is not empty")
 
     def get_container(self, datafile, ignore_drm=False):
-        if datafile.ext == ".ion":
-            return IonTextContainer(self.symtab, datafile)
-
         data = datafile.get_data()
+
+        if datafile.ext == ".ion" and not data.startswith(IonBinary.SIGNATURE):
+            return IonTextContainer(self.symtab, datafile)
 
         if data.startswith(ZIP_SIGNATURE):
             with datafile.as_ZipFile() as zf:
@@ -315,6 +320,11 @@ class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
 
         if data.startswith(KfxContainer.DRM_SIGNATURE):
 
+            if datafile.name.endswith("metadata.kfx"):
+                expanded_data = self.expand_compressed_container(data)
+                if expanded_data:
+                    return self.get_container(DataFile(datafile.name + ".decompressed", expanded_data))
+
             if ignore_drm:
                 return None
 
@@ -324,3 +334,15 @@ class YJ_Book(BookStructure, BookPosLoc, BookMetadata, KpfBook):
             raise Exception("File format is MOBI (not KFX) for %s" % datafile.name)
 
         raise Exception("Unable to determine KFX container type of %s (%s)" % (datafile.name, bytes_to_separated_hex(data[:8])))
+
+    def expand_compressed_container(self, data):
+        try:
+            from calibre_plugins.dedrm.ion import DrmIon
+            outfile = io.BytesIO()
+            DrmIon(io.BytesIO(data[8:-8]), None).parse(outfile)
+        except Exception:
+            expanded_data = None
+        else:
+            expanded_data = outfile.getvalue()
+
+        return expanded_data if expanded_data and expanded_data.startswith(KfxContainer.SIGNATURE) else None

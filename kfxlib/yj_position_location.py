@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import collections
 
 from .ion import (ion_type, IonAnnotation, IonInt, IonList, IonSExp, IonString, IonStruct, IonSymbol, IS, unannotated)
@@ -10,7 +8,7 @@ from .yj_structure import APPROXIMATE_PAGE_LIST
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 REPORT_POSITION_DATA = False

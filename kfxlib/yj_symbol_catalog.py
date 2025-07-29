@@ -1,8 +1,5 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
-
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 class IonSharedSymbolTable(object):
@@ -421,7 +418,7 @@ YJ_SYMBOLS = IonSharedSymbolTable(
         "$395",
         "$396",
         "$397?",
-        "$398?",
+        "$398",
         "$399?",
         "$400?",
         "$401?",
@@ -692,8 +689,8 @@ YJ_SYMBOLS = IonSharedSymbolTable(
         "$666",
         "$667?",
         "$668",
-        "$669?",
-        "$670?",
+        "$669",
+        "$670",
         "$671",
         "$672",
         "$673",

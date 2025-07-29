@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import collections
 import copy
 import decimal
@@ -22,7 +20,7 @@ from .yj_to_epub_resources import KFX_EPUB_Resources
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 RETAIN_USED_FRAGMENTS = False
@@ -41,6 +39,9 @@ FRAGMENT_NAME_SYMBOL = {
     }
 
 
+PROGRESS_FTYPES = {"$260", "$259", "$164"}
+
+
 class KFX_EPUB(
         KFX_EPUB_Content, KFX_EPUB_Illustrated_Layout, KFX_EPUB_Metadata, KFX_EPUB_Misc,
         KFX_EPUB_Navigation, KFX_EPUB_Notebook, KFX_EPUB_Properties, KFX_EPUB_Resources,
@@ -48,7 +49,7 @@ class KFX_EPUB(
 
     DEBUG = False
 
-    def __init__(self, book, epub2_desired=False, force_cover=False, metadata_only=False):
+    def __init__(self, book, epub2_desired=False, force_cover=False, metadata_only=False, progress=None):
         decimal.getcontext().prec = 6
         KFX_EPUB_Content.__init__(self)
         KFX_EPUB_Illustrated_Layout.__init__(self)
@@ -66,6 +67,11 @@ class KFX_EPUB(
         self.is_kpf = book.kpf_container is not None
         self.book_has_illustrated_layout_conditional_page_template = book.has_illustrated_layout_conditional_page_template
         self.used_fragments = {}
+
+        self.progress = progress
+        if self.progress is not None:
+            self.progress_limit = self.progress_countdown()
+            self.progress.set_limit(self.progress_limit)
 
         self.determine_book_symbol_format()
         self.process_content_features()
@@ -127,7 +133,6 @@ class KFX_EPUB(
         self.book_data.pop("$270", None)
         self.book_data.pop("$593", None)
         self.book_data.pop("$ion_symbol_table", None)
-        self.book_data.pop("$270", None)
         self.book_data.pop("$419", None)
         self.book_data.pop("$145", None)
         self.book_data.pop("$608", None)
@@ -314,6 +319,10 @@ class KFX_EPUB(
         data_name = self.get_fragment_name(data, ftype, delete=False)
         if data_name and data_name != fid:
             log.error("Expected %s named %s but found %s" % (ftype, fid, data_name))
+
+        if ftype in PROGRESS_FTYPES:
+            self.update_progress()
+
         return data
 
     def get_named_fragment(self, structure, ftype=None, delete=True, name_symbol=None):
@@ -332,3 +341,13 @@ class KFX_EPUB(
 
     def check_empty(self, a_dict, dict_name):
         check_empty(a_dict, dict_name)
+
+    def progress_countdown(self):
+        count = 0
+        for ftype in PROGRESS_FTYPES:
+            count += len(self.book_data.get(ftype, []))
+        return count
+
+    def update_progress(self):
+        if self.progress is not None:
+            self.progress.update_count(round((self.progress_limit - self.progress_countdown()) * 0.95))

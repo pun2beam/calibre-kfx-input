@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 from .resources import font_file_ext
 from .utilities import (
         dirname, get_url_filename, locale_decode, natural_sort_key,
@@ -25,7 +23,7 @@ from .utilities import sha1
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 DEOBFUSCATE_FONTS = True
@@ -605,7 +603,8 @@ class SourceEpub(object):
                         fixed_language = LANGUAGE_FIXUPS.get(short_language)
                         if fixed_language is not None:
                             log.info("Fixed EPUB language from '%s' to '%s'" % (lang.text, fixed_language))
-                            lang.text = short_language = fixed_language
+                            lang.text = fixed_language
+                            short_language = fixed_language.lower().partition(" ")[0].partition("-")[0]
                             fixed = True
 
                         if short_language not in KPR_SUPPORTED_LANGUAGES:
@@ -623,6 +622,9 @@ class SourceEpub(object):
                         for language, count in self.content_languages.items():
                             if count > best_language_count and re.match(current_language_pattern, language):
                                 best_language_variant, best_language_count = language, count
+
+                        if best_language_variant.lower() == "zh-tw":
+                            best_language_variant = "zh-hant"
 
                         if best_language_variant != lang.text:
                             log.info("Changed EPUB language from '%s' to '%s'" % (lang.text, best_language_variant))

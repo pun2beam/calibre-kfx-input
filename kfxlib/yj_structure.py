@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import collections
 import io
 from PIL import Image
@@ -23,7 +21,7 @@ from .yj_versions import (is_known_aux_metadata, is_known_kcb_data)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 REPORT_KNOWN_PROBLEMS = None
@@ -275,10 +273,9 @@ class BookStructure(object):
             actual_container_ids = set(containers.keys())
             missing_container_ids = cem_container_ids - actual_container_ids
             if missing_container_ids:
-                raise Exception("Book is incomplete. All of the KFX container files that make up the book must be combined "
-                                "into a KFX-ZIP file for successful conversion. (Missing containers %s)" %
-                                list_symbols(list(missing_container_ids)))
-                log.error("Entity map references missing containers: %s" % list_symbols(missing_container_ids))
+                log.error("Book is incomplete. All of the KFX container files that make up the book must be combined "
+                          "into a KFX-ZIP file for successful conversion. (Missing containers %s)" %
+                          list_symbols(list(missing_container_ids)))
 
             extra_ids = actual_container_ids - cem_container_ids
 
@@ -334,14 +331,12 @@ class BookStructure(object):
 
         missing_ftypes = required_ftypes - present_ftypes
         if missing_ftypes:
-            missing_ft = list_symbols(missing_ftypes)
-
             if missing_ftypes == {"$389"}:
-                log.warning("Book incomplete. Missing %s" % missing_ft)
+                log.warning("Book incomplete. Missing book_navigation")
             else:
-                raise Exception("Book is incomplete. All of the KFX container files that make up the book must be combined "
-                                "into a KFX-ZIP file for successful conversion. (Missing fragments %s)" % missing_ft)
-                log.error("Book incomplete. Missing %s" % missing_ft)
+                missing_ft = list_symbols(missing_ftypes)
+                log.error("Book is incomplete. All of the KFX container files that make up the book must be combined "
+                          "into a KFX-ZIP file for successful conversion. (Missing fragments %s)" % missing_ft)
 
         extra_ftypes = present_ftypes - allowed_ftypes
         if extra_ftypes:

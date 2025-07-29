@@ -1,5 +1,3 @@
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 from PIL import Image
 import io
 import random
@@ -7,6 +5,7 @@ import string
 
 from .ion import (IS, IonBLOB, IonStruct, IonSymbol, ion_type, unannotated)
 from .message_logging import log
+from .original_source_epub import LANGUAGE_FIXUPS
 from .resources import (FORMAT_SYMBOLS, image_size, jpeg_type, SYMBOL_FORMATS)
 from .utilities import (disable_debug_log, list_symbols, list_symbols_unsorted, natural_sort_key, quote_name)
 from .yj_container import (YJFragment, YJFragmentKey)
@@ -17,7 +16,7 @@ from .yj_versions import (
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 DEBUG_COVER_PAGES = False
@@ -121,6 +120,12 @@ class BookMetadata(object):
 
         if yj_metadata.asin is True:
             yj_metadata.asin = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(32))
+
+        if yj_metadata.language:
+            yj_metadata.language = fix_language_for_kfx(yj_metadata.language)
+            orig_language = self.get_metadata_value("language")
+            if orig_language and orig_language.startswith(yj_metadata.language + "-"):
+                yj_metadata.language = None
 
         book_metadata_fragment = self.fragments.get("$490")
         metadata_fragment = self.fragments.get("$258")
@@ -869,3 +874,13 @@ def unsort_author_name(author):
         author = first + " " + last
 
     return author
+
+
+def fix_language_for_kfx(language):
+    short_language = language.lower().partition(" ")[0].partition("-")[0]
+    language = LANGUAGE_FIXUPS.get(short_language, language)
+
+    if language.lower() == "zh-tw":
+        language = "zh-hant"
+
+    return language

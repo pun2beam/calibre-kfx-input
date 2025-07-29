@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 
-from PyQt5.Qt import (Qt, QApplication, QDialog, QIcon, QLabel, QMenu, QToolButton, QVBoxLayout)
+from PyQt5.Qt import (Qt, QApplication, QIcon, QMenu, QProgressDialog, QToolButton)
 
 from calibre.constants import (get_version, numeric_version)
 from calibre.gui2 import (error_dialog, info_dialog, open_url, question_dialog)
@@ -20,14 +20,18 @@ from calibre.utils.logging import (ANSIStream, GUILog)
 from calibre_plugins.kfx_input import (get_symbol_catalog_filename, KFXInput)
 from calibre_plugins.kfx_input.action_base import (ActionFromKFX, get_icons)
 from calibre_plugins.kfx_input.config import config_split_landscape_comic_images
-from calibre_plugins.kfx_input.kfxlib import (file_write_binary, KFXDRMError, set_logger, YJ_Book)
+from calibre_plugins.kfx_input.kfxlib import (file_write_binary, JobLog, KFXDRMError, set_logger, YJ_Book)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2017-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2017-2025, John Howell <jhowell@acm.org>"
 
 # resources contained in the plugin zip file
 PLUGIN_ICON = "from_kfx_icon.png"
+
+
+class UserCanceled(ValueError):
+    pass
 
 
 class FromKFXAction(InterfaceAction):
@@ -131,56 +135,57 @@ class FromKFXAction(InterfaceAction):
         m = self.menu
         m.clear()
 
-        if self.gui.library_view.selectionModel().hasSelection():
-            if len(self.gui.library_view.selectionModel().selectedRows()) == 1:
-                # If single book selected then check for KFX format
-                book_id = self.gui.library_view.get_selected_ids()[0]
-                input_format = self.kfx_format(book_id)
+        if self.gui.current_view() is self.gui.library_view:
+            if self.gui.library_view.selectionModel().hasSelection():
+                if len(self.gui.library_view.selectionModel().selectedRows()) == 1:
+                    # If single book selected then check for KFX format
+                    book_id = self.gui.library_view.get_selected_ids()[0]
+                    input_format = self.kfx_format(book_id)
 
-                if input_format:
-                    db = self.gui.current_db.new_api
-                    file_name = db.format_abspath(book_id, input_format)    # original file used only for date check
-                    modified_dt = os.path.getmtime(file_name) if os.path.isfile(file_name) else None
+                    if input_format:
+                        db = self.gui.current_db.new_api
+                        file_name = db.format_abspath(book_id, input_format)    # original file used only for date check
+                        modified_dt = os.path.getmtime(file_name) if os.path.isfile(file_name) else None
 
-                    if file_name in self.status_cache and self.status_cache[file_name][0] == modified_dt:
-                        is_drm_free, is_image_based = self.status_cache[file_name][1]
-                    else:
-                        try:
-                            input_file_name = db.format(book_id, input_format, as_file=False, as_path=True, preserve_filename=True)
-                            set_logger()
-                            book = YJ_Book(input_file_name)
-                            book.decode_book(retain_yj_locals=True)
-                        except KFXDRMError:
-                            is_drm_free = is_image_based = False
-                        except Exception:
-                            traceback.print_exc()
-                            is_drm_free = True
-                            is_image_based = False
+                        if file_name in self.status_cache and self.status_cache[file_name][0] == modified_dt:
+                            is_drm_free, is_image_based = self.status_cache[file_name][1]
                         else:
-                            is_drm_free = True
-                            is_image_based = book.is_image_based_fixed_layout
+                            try:
+                                input_file_name = db.format(book_id, input_format, as_file=False, as_path=True, preserve_filename=True)
+                                set_logger()
+                                book = YJ_Book(input_file_name)
+                                book.decode_book(retain_yj_locals=True)
+                            except KFXDRMError:
+                                is_drm_free = is_image_based = False
+                            except Exception:
+                                traceback.print_exc()
+                                is_drm_free = True
+                                is_image_based = False
+                            else:
+                                is_drm_free = True
+                                is_image_based = book.is_image_based_fixed_layout
 
-                        self.status_cache[file_name] = (modified_dt, (is_drm_free, is_image_based))     # cache for fast access
+                            self.status_cache[file_name] = (modified_dt, (is_drm_free, is_image_based))     # cache for fast access
 
-                    if input_format in self.format_actions:
-                        m.addAction(self.format_actions[input_format])
+                        if input_format in self.format_actions:
+                            m.addAction(self.format_actions[input_format])
 
-                    if is_drm_free:
-                        m.addAction(self.convert_book_to_epub_action)
+                        if is_drm_free:
+                            m.addAction(self.convert_book_to_epub_action)
 
-                        if is_image_based:
-                            m.addAction(self.convert_book_to_pdf_action)
-                            m.addAction(self.convert_book_to_cbz_action)
+                            if is_image_based:
+                                m.addAction(self.convert_book_to_pdf_action)
+                                m.addAction(self.convert_book_to_cbz_action)
+                        else:
+                            m.addAction(self.drm_error_action)
                     else:
-                        m.addAction(self.drm_error_action)
+                        m.addAction(self.input_format_error_action)
                 else:
-                    m.addAction(self.input_format_error_action)
+                    m.addAction(self.select_multiple_error_action)
             else:
-                m.addAction(self.select_multiple_error_action)
-        else:
-            m.addAction(self.select_none_error_action)
+                m.addAction(self.select_none_error_action)
 
-        m.addSeparator()
+            m.addSeparator()
 
         m.addAction(self.customize_action)
         m.addAction(self.help_action)
@@ -220,11 +225,11 @@ class FromKFXAction(InterfaceAction):
                     "<p>The book already contains %s format. If you proceed, it will be overwritten.<p>>Do you want to proceed?" % to_fmt.upper()):
                 return
 
-        wait_dialog = WaitDialog(self.gui, self.name, "Conversion in progress - please wait")
+        self.progress_dialog = ProgressDialog(self.gui, self.name, "Conversion in progress - please wait")
         db = self.gui.current_db.new_api
         input_file_name = db.format(book_id, input_format, as_file=False, as_path=True, preserve_filename=True)
         output_filename = None
-        log = set_logger(GUILog2())
+        log = set_logger(JobLog(GUILog2()))
         msg = Message()
 
         try:
@@ -242,14 +247,14 @@ class FromKFXAction(InterfaceAction):
                     log.info("Failed to read default EPUB Output preferences")
                     epub2_desired = True
 
-                epub_data = book.convert_to_epub(epub2_desired=epub2_desired)
+                epub_data = book.convert_to_epub(epub2_desired=epub2_desired, progress_fn=self.update_progress)
                 output_filename = PersistentTemporaryFile(".epub").name
                 file_write_binary(output_filename, epub_data)
                 log.info(msg("Converted book to EPUB"))
 
             elif to_fmt == "cbz":
                 if book.is_image_based_fixed_layout:
-                    cbz_data = book.convert_to_cbz(split_landscape_comic_images=config_split_landscape_comic_images())
+                    cbz_data = book.convert_to_cbz(progress_fn=self.update_progress)
                     if cbz_data:
                         output_filename = PersistentTemporaryFile(".cbz").name
                         file_write_binary(output_filename, cbz_data)
@@ -261,7 +266,8 @@ class FromKFXAction(InterfaceAction):
 
             if to_fmt == "pdf":
                 if book.is_image_based_fixed_layout:
-                    pdf_data = book.convert_to_pdf(split_landscape_comic_images=config_split_landscape_comic_images())
+                    pdf_data = book.convert_to_pdf(
+                        split_landscape_comic_images=config_split_landscape_comic_images(), progress_fn=self.update_progress)
                     if pdf_data:
                         output_filename = PersistentTemporaryFile(".pdf").name
                         file_write_binary(output_filename, pdf_data)
@@ -274,10 +280,16 @@ class FromKFXAction(InterfaceAction):
                 log.warning("This book contains PDF content. Convert to PDF to extract it.")
 
             set_logger()
-            wait_dialog.hide()
+            self.progress_dialog.hide()
 
             if output_filename:
-                info_dialog(self.gui, "Conversion Complete", msg.get(), det_msg=clean_log(log.html), show=True)
+                dialog_title = "Conversion complete"
+                dialog_msg = msg.get()
+                if log.errors:
+                    dialog_title += " with errors"
+                    dialog_msg += " (Errors were detected. Click 'Show details' for more information.)"
+                info_dialog(self.gui, dialog_title, dialog_msg, det_msg=clean_log(log.logger.html), show=True)
+
                 db.add_format(book_id, to_fmt, output_filename, replace=True, run_hooks=False)      # add format
 
                 # Update the gui view to reflect changes to the database
@@ -286,21 +298,25 @@ class FromKFXAction(InterfaceAction):
                 self.gui.library_view.model().current_changed(current, current)
                 self.gui.tags_view.recount()
             else:
-                error_dialog(self.gui, "Conversion Failed", msg.get(), det_msg=clean_log(log.html), show=True)
+                error_dialog(self.gui, "Conversion Failed", msg.get(), det_msg=clean_log(log.logger.html), show=True)
 
         except KFXDRMError:
             from calibre.gui2.dialogs.drm_error import DRMErrorMessage
             set_logger()
-            wait_dialog.hide()
+            self.progress_dialog.hide()
             DRMErrorMessage(self.gui).exec()
+
+        except UserCanceled:
+            set_logger()
+            self.progress_dialog.hide()
 
         except Exception as e:
             traceback.print_exc()
             set_logger()
-            wait_dialog.hide()
+            self.progress_dialog.hide()
             error_dialog(
                 self.gui, "Unhandled exception", repr(e),
-                det_msg=clean_log(log.html) + add_text_to_html(repr(e)) + add_text_to_html(traceback.format_exc()),
+                det_msg=clean_log(log.logger.html) + add_text_to_html(repr(e)) + add_text_to_html(traceback.format_exc()),
                 show=True)
 
     def report_version(self, log):
@@ -341,6 +357,11 @@ class FromKFXAction(InterfaceAction):
 
     def show_help(self):
         open_url("https://www.mobileread.com/forums/showthread.php?t=291290")
+
+    def update_progress(self, pct_complete):
+        self.progress_dialog.update(pct_complete)
+        if self.progress_dialog.wasCanceled():
+            raise UserCanceled
 
 
 class GUILog2(GUILog):
@@ -384,17 +405,23 @@ def add_text_to_html(text):
     return "<br/>" + html.escape(text).replace("\n", "<br/>")
 
 
-class WaitDialog(QDialog):
+class ProgressDialog(QProgressDialog):
     def __init__(self, parent, name, message):
-        QDialog.__init__(self, parent)
+        QProgressDialog.__init__(self, parent)
         self.setWindowTitle(name)
+        self.setLabelText(message)
         self.setWindowFlags(self.windowFlags() & (~Qt.WindowContextHelpButtonHint) & (~Qt.WindowCloseButtonHint))
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel(message))
-        self.setLayout(layout)
+        self.setMinimumDuration(0)
         self.setModal(True)
+        self.setRange(0, 100)
+        self.setAutoReset(False)    # do not close at 100%
         self.show()
+        self.setValue(0)
 
         for _ in range(200):
             time.sleep(0.001)
             QApplication.processEvents()    # hack to get "in progress" dialog to display
+
+    def update(self, pct_complete):
+        self.setValue(pct_complete)
+        QApplication.processEvents()

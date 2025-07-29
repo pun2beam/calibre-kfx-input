@@ -1,22 +1,17 @@
-#!/usr/bin/python
-# -*- coding: utf8 -*-
-
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 import collections
 import decimal
 import functools
 from lxml import etree
 import re
 
-from .epub_output import (EPUB_NS_URI, EPUB_TYPE, IDX_ENTRY, MATH, qname, SVG, XML_LANG, XML_NS_URI, value_str)
+from .epub_output import (EPUB_NS_URI, EPUB_TYPE, IDX_ENTRY, MATH, qname, split_value, SVG, XML_LANG, XML_NS_URI, value_str)
 from .ion import (ion_type, IonBool, IonDecimal, IonFloat, IonInt, IonList, IonString, IonStruct, IonSymbol, isstring)
 from .message_logging import log
 from .utilities import (get_url_filename, list_symbols, natural_sort_key, remove_duplicates, type_name, urlabspath, urlrelpath)
 
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 STYLE_TEST = False
@@ -1698,7 +1693,8 @@ class KFX_EPUB_Properties(object):
                     if sty[positioning] == "0":
                         sty.pop(positioning)
                     else:
-                        log.warning("%s style with unexpected position: %s" % (elem.tag, sty.tostring()))
+                        log.warning("%s style with unexpected %s position in %s: %s" % (
+                            elem.tag, positioning, book_part.filename, sty.tostring()))
 
         sty["border-spacing"] = "%s %s" % (sty["-webkit-border-horizontal-spacing"], sty["-webkit-border-vertical-spacing"])
 
@@ -2022,19 +2018,20 @@ class KFX_EPUB_Properties(object):
             self.add_composite_and_equivalent_styles(child, book_part)
 
     def fix_and_quote_font_family_list(self, value):
-        return ",".join(remove_duplicates(
+        font_family = ",".join(remove_duplicates(
             [self.quote_font_name(name) for name in self.split_and_fix_font_family_list(value)]))
+        return font_family or None
 
     def split_and_fix_font_family_list(self, value):
-        return [self.fix_font_name(name) for name in value.split(",")]
+        return list(filter(None, [self.fix_font_name(name) for name in value.split(",")]))
 
     def strip_font_name(self, name):
         name = name.strip()
 
-        if name[0] == "'" or name[0] == "\"":
+        if name and (name[0] == "'" or name[0] == "\""):
             name = name[1:]
 
-        if name[-1] == "'" or name[-1] == "\"":
+        if name and (name[-1] == "'" or name[-1] == "\""):
             name = name[:-1]
 
         return name.strip()
@@ -2042,6 +2039,8 @@ class KFX_EPUB_Properties(object):
     def fix_font_name(self, name, add=False, generic=False):
 
         name = self.strip_font_name(name)
+        if not name:
+            return name
 
         orig_name = name.lower()
 
@@ -2471,17 +2470,6 @@ def zero_quantity(val):
         return "0"
 
     return val
-
-
-def split_value(val):
-    num_match = re.match(r"^([+-]?[0-9]+\.?[0-9]*)", val)
-    if not num_match:
-        return (None, val)
-
-    num = num_match.group(1)
-    unit = val[len(num):]
-
-    return (decimal.Decimal(num), unit)
 
 
 def capitalize_font_name(name):

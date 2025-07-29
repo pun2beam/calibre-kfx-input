@@ -1,11 +1,6 @@
-#!/usr/bin/python
-# -*- coding: utf8 -*-
-
-from __future__ import (unicode_literals, division, absolute_import, print_function)
-
 
 __license__ = "GPL v3"
-__copyright__ = "2016-2024, John Howell <jhowell@acm.org>"
+__copyright__ = "2016-2025, John Howell <jhowell@acm.org>"
 
 
 ANY = True
@@ -19,6 +14,7 @@ KINDLE_RECAPS_V1 = "KINDLE_RECAPS_V1"
 MOP_SUPPORTED = "MOP_SUPPORTED"
 NMDL_NOTE = "NMDL_NOTE"
 NMDL_NOTE_V2 = "NMDL_NOTE_V2",
+NMDL_NOTE_V3 = "NMDL_NOTE_V3",
 SUPPORTS_HD_V1 = "SUPPORTS_HD_V1"
 SUPPORTS_HDV_V1 = "SUPPORTS_HDV_V1"
 SUPPORTS_HDV_V2 = "SUPPORTS_HDV_V2"
@@ -239,6 +235,7 @@ KNOWN_FEATURES = {
     "com.amazon.kindle.nmdl": {
         "note": {
             2: NMDL_NOTE_V2,
+            3: NMDL_NOTE_V3,
             },
         },
 
@@ -626,6 +623,12 @@ KNOWN_METADATA = {
             "1.93.0.0",
             "1.94.0.0",
             "1.95.0.0",
+            "1.96.0.0",
+            "1.97.0.0",
+            "1.98.0.0",
+            "1.99.0.0",
+            "1.100.0.0",
+            "1.101.0.0",
 
             "3.0.0",
             "3.1.0",
@@ -732,6 +735,12 @@ KNOWN_METADATA = {
             "3.86.0",
             "3.87.0",
             "3.88.0",
+            "3.89.0",
+            "3.90.0",
+            "3.91.0",
+            "3.92.0",
+            "3.93.0",
+            "3.94.0",
             }
 
     },
@@ -753,7 +762,10 @@ KNOWN_METADATA = {
         "yj_has_animations": {1},
         "yj_has_text_popups": {1},
         "yj_illustrated_layout": {1},
-        "yj_publisher_panels": {1},
+        "yj_publisher_panels": {
+            0,
+            1,
+            },
         "yj_textbook": {1},
 
         },
@@ -764,6 +776,9 @@ KNOWN_METADATA = {
             "portrait",
             "none"
             },
+        "intended_audience": {
+            "children",
+        },
         "multipage_selection": {"disabled"},
         "nested_span": {"enabled"},
         "selection": {"enabled"},
@@ -893,6 +908,10 @@ KNOWN_AUXILIARY_METADATA = {
     "has_large_data_table": TF,
     "IsSymNameBased": TF,
     "IS_TARGET_SECTION": {True},
+    "jpeg_resource_stream": ANY,
+    "jpeg_resource_stream_aux_id": ANY,
+    "jpeg_resource_stream_height": ANY,
+    "jpeg_resource_stream_width": ANY,
     "kSectionContainsAVI": {True},
     "links_extracted": {True},
     "link_from_text": TF,
@@ -929,10 +948,20 @@ KNOWN_KCB_DATA = {
             6,
             7,
             ],
+        "book_fl_type": [
+            0,
+            1,
+            2,
+            ],
         "book_manga_comic": [
             False,
             ],
         "book_reading_direction": [
+            0,
+            1,
+            2,
+            ],
+        "book_reading_option": [
             0,
             1,
             2,
@@ -944,6 +973,8 @@ KNOWN_KCB_DATA = {
             ],
         "book_virtual_panelmovement": [
             0,
+            1,
+            2,
             ],
         },
 
@@ -998,6 +1029,8 @@ KINDLE_VERSION_CAPABILITIES = {
     "5.14.3": [YJ_MIXED_WRITING_MODE_V2, YJ_REFLOWABLE_V13, YJ_REFLOWABLE_V14, YJ_VERTICAL_TEXT_SHADOW_V1],
     "5.14.3.2": YJ_PDF_BACKED_FIXED_LAYOUT_V1_TEST,
     "5.16.6": [YJ_AUDIO_V3, YJ_CONDITIONAL_STRUCTURE_V1, YJ_PUBLISHER_PANELS_V3, YJ_VIDEO_V3],
+    "5.18.1": [YJ_PUBLISHER_PANELS_V4, YJ_REFLOWABLE_TABLESv10, YJ_REFLOWABLE_TABLESv8, YJ_REFLOWABLE_TABLESv9, YJ_TEXT_POPUPS_V1],
+    "5.18.2": [YJ_MATHML_V1],
     }
 
 
