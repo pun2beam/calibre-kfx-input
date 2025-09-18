@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>KFX フォーマット仕様（calibre KFX Input プラグイン解析）</title>
+<style>
+body { font-family: "Segoe UI", "Hiragino Sans", sans-serif; line-height: 1.6; margin: 2em; }
+h1, h2, h3 { color: #1a3b5d; }
+code { background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 4px; }
+table { border-collapse: collapse; margin: 1em 0; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+th { background: #f0f6ff; }
+small { color: #555; }
+</style>
+</head>
+<body>
+<h1>KFX フォーマット仕様（推定）</h1>
+<p>本書は calibre 用 KFX Input プラグインのソースコードを解析し、KFX コンテナの内部構造を推定した仕様書である。Kindle 公式仕様ではなく、プラグインの挙動から得られた情報に基づいている点に留意されたい。</p>
+
+<h2>1. コンテナ全体構造</h2>
+<p>KFX ファイルは <code>"CONT"</code> という 4 バイトのシグネチャを持つコンテナであり、既定バージョンは 2（互換バージョン 1〜2）である。ヘッダー最小長は 18 バイト、推奨チャンクサイズは 4096 バイトで、コンテナの最大長は 16 MiB と定義されている。</p>
+<ul>
+<li>シグネチャ: <code>"CONT"</code></li>
+<li>バージョン: 2（許容: 1, 2）</li>
+<li>ヘッダー最小長: 18 バイト</li>
+<li>最大コンテナサイズ: 16 MiB</li>
+<li>既定圧縮方式 ID: 0（非圧縮）</li>
+<li>既定 DRM スキーム ID: 0（DRM 無し）</li>
+</ul>
+
+<h3>1.1 ヘッダーとコンテナ情報</h3>
+<p>ヘッダー先頭にはシグネチャ・バージョン・ヘッダー長に続き、Ion で表現されたコンテナ情報へのオフセットと長さが格納される。コンテナ情報は以下の Ion 構造体で、いずれもシンボル ID が数値化された名前で管理される。</p>
+<table>
+<thead><tr><th>シンボル ID</th><th>意味</th><th>備考</th></tr></thead>
+<tbody>
+<tr><td><code>$409</code></td><td>コンテナ ID（ACR）</td><td>kfxgen_acr と照合される</td></tr>
+<tr><td><code>$410</code></td><td>圧縮方式 ID</td><td>既定値 0。異なる場合は警告</td></tr>
+<tr><td><code>$411</code></td><td>DRM スキーム ID</td><td>既定値 0</td></tr>
+<tr><td><code>$412</code></td><td>チャンクサイズ</td><td>既定値 4096</td></tr>
+<tr><td><code>$413</code>/<code>$414</code></td><td>エンティティ索引テーブルの開始位置とサイズ</td><td>テーブル内の各行はエンティティ ID、型 ID、データのオフセット・サイズを保持</td></tr>
+<tr><td><code>$415</code>/<code>$416</code></td><td>文書シンボル表の位置と長さ</td><td>存在する場合、Ion の <code>$ion_symbol_table</code> 注釈で格納</td></tr>
+<tr><td><code>$594</code>/<code>$595</code></td><td>フォーマット機能ブロックの位置と長さ</td><td>コンテナバージョン &gt; 1 の場合に使用</td></tr>
+</tbody>
+</table>
+<p>コンテナ情報 Ion から未消費の値が残った場合は異常とみなされる。</p>
+
+<h3>1.2 ドキュメントシンボル表</h3>
+<p><code>$415/$416</code> が示す領域には Ion 注釈 <code>$ion_symbol_table</code> を持つシンボル表が格納される。プラグインは読み込み時に Amazon のシステムシンボル表を差し引き、内部シンボルテーブルへ登録する。シリアライズ時は逆に再加算してエクスポートする。</p>
+
+<h3>1.3 フォーマット機能ブロック</h3>
+<p>バージョン 2 以降のコンテナでは、任意で <code>$593</code> 注釈を持つフォーマット機能 Ion を格納できる。機能ブロックはシンボルテーブルのローカル ID が 595 より大きい場合にのみ書き戻される。</p>
+
+<h3>1.4 kfxgen 情報ストリーム</h3>
+<p>ヘッダーの末尾から本体データまでの領域には、JSON 風テキストが挿入されており、アプリケーションバージョン・パッケージバージョン・ペイロード SHA-1・ACR を記録する。テキストは <code>key:</code>/<code>value:</code> 形式で格納されるため、解析時に JSON へ整形して扱う。</p>
+
+<h2>2. コンテナエンティティ</h2>
+<p>各フラグメントはエンティティとして格納される。エンティティは <code>"ENTY"</code> シグネチャとバージョン 1 を持つヘッダーを備え、先頭のヘッダーブロックは Ion で圧縮方式と DRM スキーム（いずれも既定値 0）を記録する。ヘッダー後続のデータ領域には実際のフラグメント本体が格納される。</p>
+<ul>
+<li>シグネチャ: <code>"ENTY"</code></li>
+<li>バージョン: 1</li>
+<li>ヘッダー最小長: 10 バイト</li>
+<li>ヘッダー Ion: <code>$410</code>（圧縮）・<code>$411</code>（DRM）</li>
+</ul>
+<p>フラグメントの型シンボルが <code>$418</code> または <code>$417</code> の場合はバイナリ BLOB として格納され、それ以外は IonBinary で Ion 値として解釈される。エンティティには ID（<code>$348</code> 注釈で匿名 ID を示す場合あり）とフラグメント型のシンボル ID が添付され、コンテナ情報のエンティティ一覧 (<code>$181</code>) にも <code>[type_id, id_id]</code> の並びで登録される。</p>
+
+<h2>3. フラグメント体系</h2>
+<p>KFX は Ion 注釈を利用して「フラグメント」と呼ばれる論理単位を管理する。プラグインは既知のフラグメント型とその並び順、必須／任意要素を以下のように定義している。</p>
+
+<h3>3.1 フラグメント型の優先順序</h3>
+<p>並べ替えや比較時に利用される優先順序は次の通り。</p>
+<pre><code>$ion_symbol_table, $270, $593, $585, $490, $258, $538, $389, $390,
+$260, $259, $608, $145, $756, $692, $157,
+$391, $266, $394,
+$264, $265, $550, $609, $621, $611, $610,
+$597, $267, $387,
+$395,
+$262, $164,
+$418, $417,
+$419</code></pre>
+
+<h3>3.2 ルートおよび単一出現フラグメント</h3>
+<p>ルートフラグメント（コンテナ直下に現れる）の型と、その中で単一出現が期待されるものは以下の通りである。</p>
+<table>
+<thead><tr><th>カテゴリー</th><th>フラグメント型</th></tr></thead>
+<tbody>
+<tr><td>ルート</td><td><code>$ion_symbol_table</code>, <code>$270</code>, <code>$490</code>, <code>$389</code>, <code>$419</code>, <code>$585</code>, <code>$538</code>, <code>$262</code>, <code>$593</code>, <code>$550</code>, <code>$258</code>, <code>$265</code>, <code>$264</code>, <code>$395</code>, <code>$390</code>, <code>$621</code>, <code>$611</code></td></tr>
+<tr><td>単一出現</td><td>上記ルート集合から <code>$270</code>, <code>$262</code>, <code>$593</code> を除いたもの（1 つのみ存在が期待される）</td></tr>
+</tbody>
+</table>
+
+<h3>3.3 必須および許容フラグメント</h3>
+<table>
+<thead><tr><th>種別</th><th>フラグメント型</th></tr></thead>
+<tbody>
+<tr><td>必須</td><td><code>$ion_symbol_table</code>, <code>$270</code>, <code>$490</code>, <code>$389</code>, <code>$419</code>, <code>$538</code>, <code>$550</code>, <code>$258</code>, <code>$265</code>, <code>$264</code>, <code>$611</code></td></tr>
+<tr><td>任意</td><td><code>$266</code>, <code>$597</code>, <code>$418</code>, <code>$417</code>, <code>$394</code>, <code>$145</code>, <code>$585</code>, <code>$610</code>, <code>$164</code>, <code>$262</code>, <code>$593</code>, <code>$391</code>, <code>$692</code>, <code>$387</code>, <code>$395</code>, <code>$756</code>, <code>$260</code>, <code>$267</code>, <code>$390</code>, <code>$609</code>, <code>$259</code>, <code>$608</code>, <code>$157</code>, <code>$621</code></td></tr>
+</tbody>
+</table>
+
+<h3>3.4 フラグメント ID の決定</h3>
+<p>特定のフラグメント型は内部フィールド値で識別子（<code>fid</code>）を導出する。例えば <code>$266</code> はフィールド <code>$180</code>、<code>$145</code> は <code>name</code> フィールドを ID として用いる。ID 判定に利用されるフィールド一覧を次表に示す。</p>
+<table>
+<thead><tr><th>フラグメント型</th><th>参照キー</th></tr></thead>
+<tbody>
+<tr><td><code>$266</code></td><td><code>$180</code></td></tr>
+<tr><td><code>$597</code></td><td><code>$174</code>, <code>$598</code></td></tr>
+<tr><td><code>$418</code>/<code>$417</code></td><td><code>$165</code></td></tr>
+<tr><td><code>$394</code></td><td><code>$240</code></td></tr>
+<tr><td><code>$145</code></td><td><code>name</code></td></tr>
+<tr><td><code>$164</code></td><td><code>$175</code></td></tr>
+<tr><td><code>$391</code></td><td><code>$239</code></td></tr>
+<tr><td><code>$692</code></td><td><code>name</code></td></tr>
+<tr><td><code>$387</code></td><td><code>$174</code></td></tr>
+<tr><td><code>$756</code></td><td><code>$757</code></td></tr>
+<tr><td><code>$260</code>/<code>$267</code>/<code>$609</code></td><td><code>$174</code></td></tr>
+<tr><td><code>$259</code></td><td><code>$176</code></td></tr>
+<tr><td><code>$608</code></td><td><code>$598</code></td></tr>
+<tr><td><code>$157</code></td><td><code>$173</code></td></tr>
+<tr><td><code>$610</code></td><td><code>$602</code></td></tr>
+</tbody>
+</table>
+
+<h3>3.5 フラグメント間参照</h3>
+<p>多くの Ion 構造は他フラグメントを参照するシンボルフィールドを持つ。プラグインが把握している代表的な参照先は以下の通り。</p>
+<ul>
+<li><code>$749</code> → <code>$259</code>（目次リンクなど）</li>
+<li><code>$165</code>/<code>$636</code> → <code>$417</code>（リソース参照）</li>
+<li><code>$479</code>/<code>$245</code>/<code>$167</code>/<code>$175</code>/<code>$528</code>/<code>$214</code>/<code>$635</code> → <code>$164</code></li>
+<li><code>$392</code> → <code>$391</code>、<code>$174</code>/<code>$170</code> → <code>$260</code>、<code>$176</code> → <code>$259</code></li>
+</ul>
+<p>辞書や入れ子構造向けの特別ルール（<code>$391</code>→<code>$394</code> など）も定義されている。</p>
+
+<h2>4. メタデータ</h2>
+<p>メタデータは主に <code>$490</code> フラグメントの <code>$491</code> 構造、および <code>$258</code> フラグメントのキー/値マップで管理される。既知のメタデータキーとシンボル ID の対応は次の通り。</p>
+<table>
+<thead><tr><th>人間可読キー</th><th>シンボル ID</th></tr></thead>
+<tbody>
+<tr><td>ASIN</td><td><code>$224</code></td></tr>
+<tr><td>asset_id</td><td><code>$466</code></td></tr>
+<tr><td>author</td><td><code>$222</code></td></tr>
+<tr><td>cde_content_type</td><td><code>$251</code></td></tr>
+<tr><td>cover_image</td><td><code>$424</code></td></tr>
+<tr><td>description</td><td><code>$154</code></td></tr>
+<tr><td>language</td><td><code>$10</code></td></tr>
+<tr><td>orientation</td><td><code>$215</code></td></tr>
+<tr><td>publisher</td><td><code>$232</code></td></tr>
+<tr><td>reading_orders</td><td><code>$169</code></td></tr>
+<tr><td>support_landscape</td><td><code>$218</code></td></tr>
+<tr><td>support_portrait</td><td><code>$217</code></td></tr>
+<tr><td>title</td><td><code>$153</code></td></tr>
+</tbody>
+</table>
+<p><code>$490</code> 内の <code>kindle_title_metadata</code> コレクションでは、キー <code>author</code>／<code>title</code>／<code>ASIN</code> 等を個別のレコードとして保持する。<code>$258</code> には冗長な情報が残っていることがあり、<code>author</code> フィールドは複数著者を文字列から分割して構築する処理が含まれている。</p>
+<p>メタデータ書き込み時には既存値の差し替えやカバー画像の再エンコード（JPEG 形式の検証）を行い、必要に応じて ASIN を自動生成するロジックも存在する。</p>
+
+<h2>5. データ型と Ion 表現</h2>
+<p>KFX の論理データは Amazon Ion 形式で表現される。Ion は JSON に類似した構造化バイナリで、シンボルテーブルによる識別子管理を行う。</p>
+<ul>
+<li>Ion の基本型は bool、decimal、float、int、list、null、string 等。</li>
+<li><code>IonAnnotation</code> は Ion 値に対し 1 つ以上のシンボル注釈を付与する。フラグメントは <code>fid</code> と <code>ftype</code> の 2 注釈を持つ。</li>
+<li>バイナリデータは <code>IonBLOB</code> として扱われ、ASCII で解釈できない場合は大型データとして判定される。</li>
+<li><code>IonStruct</code> は順序付きマップであり、偶数個の引数を <code>キー, 値</code> のペアとして受け取る。</li>
+<li><code>IonSymbol</code> はシンボルテーブル内の文字列を表し、ASCII 範囲外はバッククォート表記で表示される。</li>
+</ul>
+
+<h2>6. フォーマット識別と派生形式</h2>
+<p>コンテナ内に含まれるフラグメント型の ID 番号を調べ、<code>$259</code>/<code>$260</code>/<code>$538</code> を含む場合は「KFX main」、<code>$258</code>/<code>$419</code>/<code>$490</code>/<code>$585</code> などメタデータ主体の場合は「KFX metadata」、<code>$417</code> のみの場合は「KFX attachable」と判定する。</p>
+<p>DRM 付き Ion ブロックは <code>"\xeaDRMION\xee"</code> で始まることがあるが、既定状態では DRM スキーム 0 が想定される。</p>
+
+<h2>7. 画像とリソース</h2>
+<p>画像リソースはチェック対象フォーマット（BMP, GIF, JPEG, PNG, SVG, TIFF, WEBP 等）と未チェックフォーマット（JXR, KVG）に分類される。固定レイアウトの画像形式は <code>$286</code> などのシンボルで示される。リソース参照は <code>$165</code>（および <code>$636</code>）のフィールドから <code>$417</code> フラグメントを指す。</p>
+
+<h2>8. セクションデータと期待される注釈</h2>
+<p>テキストやレイアウト断片（<code>$387</code>, <code>$260</code>, <code>$267</code>, <code>$609</code>）はセクションデータとして扱われ、特定の注釈組み合わせ（例: <code>$389::$247::$393</code>）が期待される。辞書コンテンツではさらに <code>$260::$141::$608</code> のような注釈が想定される。</p>
+
+<h2>9. シンボル分類</h2>
+<p>プラグインはシンボルを <em>common</em>（共通）, <em>dictionary</em>（辞書用）, <em>original</em>（元書籍由来）, <em>base64</em>, <em>short</em>, <em>shared</em>, <em>unknown</em> といったカテゴリーに分類し、解析時の診断情報に用いている。</p>
+
+<h2>10. 注意事項</h2>
+<ul>
+<li>本仕様はプラグイン実装に基づく推定であり、Amazon が公式に公開する仕様とは異なる可能性がある。</li>
+<li>DRM が適用されたコンテナでは Ion データが暗号化されるため、本仕様のままでは解読できない。</li>
+<li>Ion シンボル ID（<code>$xxx</code>）はシンボルテーブルに依存するため、別のコンテナでは異なる名称が割り当てられる可能性がある。</li>
+</ul>
+
+<p><small>出典: calibre KFX Input プラグイン（John Howell, 2016-2025）</small></p>
+</body>
+</html>
