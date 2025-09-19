@@ -25,10 +25,10 @@ seq:
     doc: "Length in bytes of the Ion container-info structure"
   - id: header_area
     type: header_section
-    args:
-      - container_info_offset
-      - container_info_length
-      - header_len
+    params:
+      container_info_offset: container_info_offset
+      container_info_length: container_info_length
+      header_len: header_len
   - id: entity_payload
     type: bytes
     size-eos: true
@@ -44,9 +44,9 @@ instances:
 types:
   header_section:
     params:
-      container_info_offset
-      container_info_length
-      header_len
+      - id: container_info_offset
+      - id: container_info_length
+      - id: header_len
     seq:
       - id: prefix_area
         type: pre_container_info
